@@ -8,8 +8,7 @@ import {
   createIntersectionObserver,
   priorityLoad,
   getLibs,
-  delay,
-  updateQueryParameter
+  delay
 } from '../../../scripts/utils.js';
 
 const miloLibs = getLibs('/libs');
@@ -186,7 +185,6 @@ async function removeBgHandler(cfg, changeDisplay = true, cachedImg=null) {
     }
     if (scanResponse.status === 429
       || (scanResponse.status >= 500 && scanResponse.status < 600)) {
-      const { retryRequestUntilProductRedirect } = await import('../../../scripts/utils.js');
       scanResponse = await retryRequestUntilProductRedirect(cfg, () => scanImgForSafety(cfg, id));
     }
   }
@@ -523,6 +521,37 @@ async function uploadCallback(cfg) {
   if (enabledFeatures.length === 1) return;
   await removeBgHandler(cfg);
   cfg.isUpload = false;
+}
+
+async function retryRequestUntilProductRedirect(cfg, requestFunction, delay = 1000) {
+  while (cfg.continueRetrying) {
+    try {
+      const scanResponse = await requestFunction();
+      if (scanResponse.status === 429 || (scanResponse.status >= 500 && scanResponse.status < 600)) {
+        await new Promise((res) => setTimeout(res, delay));
+      } else {
+        cfg.scanResponseAfterRetries = scanResponse;
+        return scanResponse;
+      }
+    } catch (e) {
+      await new Promise((res) => setTimeout(res, delay));
+    }
+  }
+  return cfg.scanResponseAfterRetries;
+}
+
+function updateQueryParameter(url, paramName='format', oldValue='webply', newValue='jpeg') {
+  try {
+      const urlObj = new URL(url);
+      const params = urlObj.searchParams;
+      if (params.get(paramName) === oldValue) {
+          params.set(paramName, newValue);
+      }
+
+      return urlObj.toString();
+  } catch (error) {
+      return null;
+  }
 }
 
 export default async function init(cfg) {
